@@ -1,0 +1,5 @@
+Package: fhasher
+Version: 1.0.0
+Architecture: amd64
+Maintainer: EBCEYS
+Description: The file hasher
