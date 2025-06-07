@@ -17,10 +17,8 @@ class Program
 
     static void Main(string[] args)
     {
-        Option<byte> lengthOption = new("--length", () => DefaultLength, $"The password length 0 < length <= {byte.MaxValue}.");
-        lengthOption.AddAlias("-l");
-        Option<bool> useSpecsOption = new("--specs", () => true, "Spec symbols usage.");
-        useSpecsOption.AddAlias("-s");
+        Option<byte> lengthOption = new(["--length", "-l"], () => DefaultLength, $"The password length 0 < length <= {byte.MaxValue}.");
+        Option<bool> useSpecsOption = new(["--specs", "-s"], () => true, "Spec symbols usage.");
 
         RootCommand root = new($"The password generation application.{l}Generates new password (default length is {DefaultLength}) and writes it to stdout without new line.");
         root.AddOption(lengthOption);
@@ -35,15 +33,18 @@ class Program
             }
             
             char[] symbols = useSpecs ? Alphabet.Concat(Specs).ToArray() : Alphabet;
-            Random random = new();
-            StringBuilder sb = new();
-            for (int i = 0; i < length; i++)
-            {
-                sb.Append(random.GetItems(symbols, 1));
-            }
-            Console.Write(sb.ToString());
+            PasswordGenerator pasGen = new(symbols, Random.Shared);
+            Console.Write(pasGen.Generate(length));
         }, lengthOption, useSpecsOption);
 
         root.Invoke(args);
+    }
+}
+
+internal class PasswordGenerator(char[] alphabet, Random random)
+{
+    public char[] Generate(int length)
+    {
+        return random.GetItems(alphabet, length);
     }
 }
