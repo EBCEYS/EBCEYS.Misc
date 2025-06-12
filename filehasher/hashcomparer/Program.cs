@@ -13,7 +13,7 @@ class Program
             IsRequired = true
         };
 
-        Option<HashAlgorithm> algsOption = new(["--algorithm", "--alg", "-a"], "The hash algorithms.");
+        Option<HashAlgorithm?> algsOption = new(["--algorithm", "--alg", "-a"], () => null, "The hash algorithms.");
 
         Option<FileInfo?> hashFileOption = new(["--hash", "-h"], () => null,
             "The file with hash. If not specified, stdin will be used.");
@@ -28,40 +28,32 @@ class Program
         {
             if (!file.Exists)
             {
-                Console.Error.WriteLine($"The file {file.FullName} does not exist.");
+                WriteError($"The file {file.FullName} does not exist.");
                 return;
             }
 
             if (!TryGetInputHash(hashFile, out string? input) || input == null) return;
             HashComparer comparer = new(file);
-            CompareHashes(comparer, input, alg);
-        }, fileOption, algsOption, hashFileOption);
-
-        rootCommand.SetHandler((file, hashFile) =>
-        {
-            if (!file.Exists)
+            if (alg != null)
             {
-                Console.Error.WriteLine($"The file {file.FullName} does not exist.");
+                CompareHashes(comparer, input.ReplaceLineEndings("").Trim(), alg.Value);
                 return;
             }
-
-            if (!TryGetInputHash(hashFile, out string? input) || input == null) return;
 
             foreach (string line in input.Split(Environment.NewLine).Select(s => s.Trim()).Where(s => s.Length > 0))
             {
                 try
                 {
                     FileHashInfo hashInfo = FileHashInfo.CreateFromString(line);
-                    HashComparer comparer = new(file);
                     CompareHashes(comparer, hashInfo.Hash, hashInfo.Algorithm);
                 }
                 catch (Exception ex)
                 {
-                    Console.Error.WriteLine($"Error on reading line: {ex.Message}");
+                    WriteError($"Error on reading line: {ex.Message}");
                     return;
                 }
             }
-        }, fileOption, hashFileOption);
+        }, fileOption, algsOption, hashFileOption);
 
 
         rootCommand.Invoke(args);
@@ -70,7 +62,7 @@ class Program
     private static void CompareHashes(HashComparer comparer, string input, HashAlgorithm alg)
     {
         int result = comparer.Compare(input, alg, out string hash);
-
+        
         Console.WriteLine(result == 0 ? $"{alg} Hashes are equal!" : $"{alg} Hashes are not equal!");
         Console.WriteLine($"File: {hash}{Environment.NewLine}Hash: {input}");
     }
@@ -81,13 +73,13 @@ class Program
         {
             input = ReadFromStdIn();
             if (!string.IsNullOrEmpty(input)) return true;
-            Console.Error.WriteLine("No hash file specified.");
+            WriteError("No hash file specified.");
             return false;
         }
 
         if (!hashFile.Exists)
         {
-            Console.Error.WriteLine($"The hash file {hashFile.FullName} does not exist.");
+            WriteError($"The hash file {hashFile.FullName} does not exist.");
             input = null;
             return false;
         }
@@ -106,7 +98,14 @@ class Program
             sb.AppendLine(line);
         }
 
-        return sb.ToString();
+        return sb.ToString().Trim();
+    }
+
+    private static void WriteError(string message)
+    {
+        Console.ForegroundColor = ConsoleColor.Red;
+        Console.Error.WriteLine(message);
+        Console.ResetColor();
     }
 }
 
@@ -160,7 +159,8 @@ internal class HashComparer(FileInfo fileInput)
 {
     public int Compare(string hash, HashAlgorithm alg, out string fileHash)
     {
-        Hasher hasher = new(alg, fileInput.OpenRead());
+        using FileStream fileStream = fileInput.OpenRead();
+        Hasher hasher = new(alg, fileStream);
         fileHash = hasher.Process();
         return string.Compare(fileHash, hash, StringComparison.InvariantCultureIgnoreCase);
     }
